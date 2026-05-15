@@ -12,7 +12,7 @@
 
 # 📸 Aperçu du jeu
 
-https://github.com/user-attachments/assets/b6419acd-fe5b-43e7-8203-b5c0a9923844
+<img width="1862" height="865" alt="image" src="https://github.com/user-attachments/assets/002042c9-5f8e-4efa-980f-e15f452b2181" />
 
 ---
 
