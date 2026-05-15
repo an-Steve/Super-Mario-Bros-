@@ -12,7 +12,7 @@
 
 # 📸 Aperçu du jeu
 
-![Aperçu du jeu](https://via.placeholder.com/1200x500?text=Super+Mario+Bros+Ultimate+Edition)
+![Aperçu du jeu](<img width="1862" height="865" alt="image" src="https://github.com/user-attachments/assets/b6419acd-fe5b-43e7-8203-b5c0a9923844" />)
 
 ---
 
