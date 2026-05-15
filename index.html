@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Super Mario Bros - Météo & Vies !</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0f2b3d, #1a4a6f);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Courier New', monospace;
+            padding: 20px;
+        }
+
+        .game-container {
+            background: #000;
+            padding: 10px;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        }
+
+        canvas {
+            display: block;
+            margin: 0 auto;
+            border-radius: 12px;
+            cursor: pointer;
+        }
+
+        .info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #1a1a2e;
+            color: white;
+            padding: 10px 20px;
+            margin-top: 10px;
+            border-radius: 10px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .info div {
+            background: #16213e;
+            padding: 5px 15px;
+            border-radius: 20px;
+        }
+
+        button {
+            background: #e94560;
+            border: none;
+            color: white;
+            padding: 5px 20px;
+            border-radius: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            font-family: monospace;
+        }
+
+        button:hover {
+            background: #ff6b6b;
+            transform: scale(1.02);
+        }
+
+        .controls {
+            background: #0f3460;
+            padding: 8px;
+            margin-top: 10px;
+            border-radius: 10px;
+            text-align: center;
+            color: #ddd;
+            font-size: 11px;
+        }
+
+        .boss-bar {
+            background: #4a0000;
+            border-radius: 10px;
+            height: 12px;
+            width: 200px;
+            overflow: hidden;
+        }
+
+        .boss-health {
+            background: #ff0000;
+            height: 100%;
+            width: 100%;
+            transition: width 0.3s;
+        }
+
+        .weather-icon {
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+<div>
+    <div class="game-container">
+        <canvas id="gameCanvas" width="900" height="500"></canvas>
+        <div class="info">
+            <div>⭐ SCORE: <span id="scoreDisplay">0</span></div>
+            <div>🪙 PIÈCES: <span id="coinDisplay">0</span></div>
+            <div>🔥 FEU: <span id="fireStatus">❌</span></div>
+            <div>❤️ VIES: <span id="livesDisplay">3</span></div>
+            <div>🏁 NIVEAU: <span id="levelDisplay">1</span></div>
+            <div>🌤️ MÉTÉO: <span id="weatherDisplay" class="weather-icon">☀️</span></div>
+            <div>🐲 BOWSER: <div class="boss-bar"><div class="boss-health" id="bossHealth"></div></div></div>
+            <button id="resetBtn">RECOMMENCER</button>
+        </div>
+        <div class="controls">
+            ← → : MARCHE &nbsp;&nbsp;|&nbsp;&nbsp; ↑ ou ESPACE : SAUT &nbsp;&nbsp;|&nbsp;&nbsp;
+            🔥 X : FLAMME (fleur) &nbsp;&nbsp;|&nbsp;&nbsp; ❤️ Coeur vert = VIE +1 &nbsp;&nbsp;|&nbsp;&nbsp; 🌦️ Météo change ! 
+        </div>
+    </div>
+</div>
+
+<script>
+    // ============ CONFIGURATION ============
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    const W = 900;
+    const H = 500;
+    const GRAVITY = 0.7;
+    const JUMP = -10;
+    
+    let WORLD_WIDTH = 3500;
+    
+    // ============ MÉTÉO ============
+    let weather = {
+        type: 'sunny', // sunny, rain, storm, snow
+        particles: [],
+        timer: 0,
+        changeInterval: 600 // change toutes les 10 secondes environ
+    };
+    
+    const weatherTypes = ['sunny', 'rain', 'storm', 'snow'];
+    const weatherIcons = { sunny: '☀️', rain: '🌧️', storm: '⛈️', snow: '❄️' };
+    
+    function changeWeather() {
+        let newType;
+        do { newType = weatherTypes[Math.floor(Math.random() * weatherTypes.length)]; }
+        while (newType === weather.type);
+        weather.type = newType;
+        document.getElementById('weatherDisplay').innerHTML = weatherIcons[weather.type];
+        weather.particles = [];
+        
+        // Créer les particules
+        let particleCount = weather.type === 'rain' ? 150 : (weather.type === 'storm' ? 200 : (weather.type === 'snow' ? 100 : 0));
+        for (let i = 0; i < particleCount; i++) {
+            weather.particles.push({
+                x: Math.random() * W,
+                y: Math.random() * H,
+                speed: 3 + Math.random() * 4,
+                size: weather.type === 'snow' ? 3 : 2
+            });
+        }
+    }
+    
+    function updateWeather() {
+        weather.timer++;
+        if (weather.timer >= weather.changeInterval) {
+            weather.timer = 0;
+            changeWeather();
+        }
+        
+        // Mettre à jour les particules
+        for (let p of weather.particles) {
+            p.y += p.speed;
+            if (weather.type === 'rain' || weather.type === 'storm') p.x += (Math.random() - 0.5) * 1;
+            if (weather.type === 'snow') p.x += (Math.random() - 0.5) * 0.5;
+            if (p.y > H) {
+                p.y = -10;
+                p.x = Math.random() * W;
+            }
+            if (p.x < 0) p.x = W;
+            if (p.x > W) p.x = 0;
+        }
+        
+        // Effet météo sur le gameplay
+        if (weather.type === 'storm') {
+            player.vx *= 0.98; // vent qui freine
+        }
+    }
+    
+    function drawWeather() {
+        if (weather.type === 'sunny') return;
+        
+        for (let p of weather.particles) {
+            if (weather.type === 'rain') {
+                ctx.fillStyle = '#aaddffaa';
+                ctx.fillRect(p.x, p.y, 2, p.size * 2);
+            } else if (weather.type === 'storm') {
+                ctx.fillStyle = '#8888ffaa';
+                ctx.fillRect(p.x, p.y, 2, p.size * 3);
+                // Éclairs aléatoires
+                if (Math.random() < 0.01) {
+                    ctx.fillStyle = '#ffff99aa';
+                    ctx.fillRect(0, 0, W, H);
+                }
+            } else if (weather.type === 'snow') {
+                ctx.fillStyle = '#ffffffcc';
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+    }
+    
+    // ============ JOUEUR ============
+    let player = {
+        x: 200, y: 0, w: 30, h: 32,
+        vx: 0, vy: 0, onGround: true, facingRight: true,
+        invincible: false, invincibleTimer: 0,
+        lives: 3, firePower: false, fireTimer: 0, fireCooldown: 0,
+        walkCycle: 0
+    };
+    
+    // ============ BOWSER ============
+    let bowser = {
+        x: 0, y: 100, w: 80, h: 70,
+        alive: true, health: 30, maxHealth: 30,
+        dir: 1, speed: 1.5, fireTimer: 0,
+        wingCycle: 0, active: false, appearLevel: 3
+    };
+    
+    let bowserFireballs = [];
+    
+    // ============ AUTRES ============
+    let fireballs = [];
+    let cameraX = 0;
+    let score = 0;
+    let coins = 0;
+    let gameOver = false;
+    let gameWin = false;
+    let deathTimer = 0;
+    let currentLevel = 1;
+    let levelTransition = false;
+    let transitionTimer = 0;
+    
+    let platforms = [];
+    let enemies = [];
+    let coinsList = [];
+    let powerups = [];
+    let extraLives = []; // ❤️ vies supplémentaires
+    let flag = null;
+    
+    const keys = { left: false, right: false, jump: false, fire: false };
+    
+    // ============ TYPES D'ENNEMIS ============
+    // 0: Goomba, 1: Koopa (tortue), 2: Mushroom (champignon sauteur)
+    function createEnemy(x, y, type) {
+        return {
+            x: x, y: y, w: 30, h: 30, alive: true,
+            dir: Math.random() > 0.5 ? 1 : -1, speed: 0.8 + Math.random() * 0.6,
+            walkCycle: 0, type: type,
+            jumpTimer: 0
+        };
+    }
+    
+    // ============ GÉNÉRATION DES NIVEAUX ============
+    function generateLevel(level) {
+        platforms = [];
+        enemies = [];
+        coinsList = [];
+        powerups = [];
+        extraLives = [];
+        fireballs = [];
+        bowserFireballs = [];
+        
+        WORLD_WIDTH = 3200 + (level - 1) * 400;
+        
+        // SOL
+        platforms.push({ x: 0, y: H - 40, w: WORLD_WIDTH, h: 40 });
+        
+        // Plateformes
+        let platCount = 18 + Math.floor(level / 2);
+        for (let i = 0; i < platCount; i++) {
+            let x = 200 + i * 160 + (level * 10);
+            let y = H - 120 - (i % 6) * 55;
+            if (y < H - 450) y = H - 450;
+            if (x + 90 < WORLD_WIDTH - 150) {
+                platforms.push({ x: x, y: y, w: 85 + (i % 3) * 8, h: 20 });
+            }
+        }
+        
+        // ENNEMIS variés
+        let enemyCount = 10 + Math.floor(level * 1.5);
+        for (let i = 0; i < enemyCount; i++) {
+            let x = 350 + i * 140 + Math.random() * 120;
+            if (x + 30 < WORLD_WIDTH - 200) {
+                let groundY = H - 40;
+                for (let plat of platforms) {
+                    if (x >= plat.x && x <= plat.x + plat.w) {
+                        groundY = plat.y;
+                        break;
+                    }
+                }
+                let type = Math.floor(Math.random() * 3);
+                enemies.push(createEnemy(x, groundY - 30, type));
+            }
+        }
+        
+        // PIÈCES
+        let coinCount = 30 + level * 4;
+        for (let i = 0; i < coinCount; i++) {
+            let x = 180 + i * 70 + Math.random() * 140;
+            if (x + 12 < WORLD_WIDTH - 120) {
+                let y = H - 55;
+                for (let plat of platforms) {
+                    if (x >= plat.x && x <= plat.x + plat.w) {
+                        y = plat.y - 15;
+                        break;
+                    }
+                }
+                coinsList.push({ x: x, y: y, w: 12, h: 12, taken: false });
+            }
+        }
+        
+        // POWER-UPS (fleurs et étoiles)
+        let powerupPositions = [550, 1300, 2000, 2700];
+        for (let i = 0; i < powerupPositions.length; i++) {
+            if (powerupPositions[i] < WORLD_WIDTH - 150) {
+                let y = H - 75;
+                for (let plat of platforms) {
+                    if (powerupPositions[i] >= plat.x && powerupPositions[i] <= plat.x + plat.w) {
+                        y = plat.y - 25;
+                        break;
+                    }
+                }
+                powerups.push({
+                    x: powerupPositions[i], y: y, w: 22, h: 22,
+                    type: i % 2 === 0 ? 'flower' : 'star', taken: false
+                });
+            }
+        }
+        
+        // ❤️ VIES SUPPLÉMENTAIRES (coeurs verts)
+        for (let i = 0; i < 3 + level; i++) {
+            let x = 500 + Math.random() * (WORLD_WIDTH - 600);
+            let y = H - 70;
+            for (let plat of platforms) {
+                if (x >= plat.x && x <= plat.x + plat.w) {
+                    y = plat.y - 25;
+                    break;
+                }
+            }
+            extraLives.push({
+                x: x, y: y, w: 18, h: 18,
+                taken: false
+            });
+        }
+        
+        // DRAPEAU
+        flag = { x: WORLD_WIDTH - 100, y: H - 85, w: 20, h: 45, poleX: WORLD_WIDTH - 90, poleY: H - 120, reached: false };
+        platforms.push({ x: WORLD_WIDTH - 130, y: H - 45, w: 80, h: 10 });
+        
+        // BOWSER
+        if (level >= bowser.appearLevel) {
+            bowser.active = true;
+            bowser.alive = true;
+            bowser.health = bowser.maxHealth + Math.floor(level / 2) * 5;
+            bowser.maxHealth = bowser.health;
+            bowser.x = WORLD_WIDTH - 350;
+            bowser.y = 80;
+            bowser.dir = 1;
+            updateBossHealthBar();
+        } else {
+            bowser.active = false;
+        }
+    }
+    
+    function updateBossHealthBar() {
+        let percent = (bowser.health / bowser.maxHealth) * 100;
+        document.getElementById('bossHealth').style.width = percent + '%';
+        if (percent < 30) document.getElementById('bossHealth').style.backgroundColor = '#ff6600';
+        else document.getElementById('bossHealth').style.backgroundColor = '#ff0000';
+    }
+    
+    // ============ INITIALISATION ============
+    function init() {
+        currentLevel = 1;
+        gameOver = false;
+        gameWin = false;
+        levelTransition = false;
+        
+        player = {
+            x: 200, y: H - 40 - 32, w: 30, h: 32,
+            vx: 0, vy: 0, onGround: true, facingRight: true,
+            invincible: false, invincibleTimer: 0,
+            lives: 3, firePower: false, fireTimer: 0, fireCooldown: 0,
+            walkCycle: 0
+        };
+        
+        score = 0;
+        coins = 0;
+        cameraX = 0;
+        
+        // Météo
+        weather.type = 'sunny';
+        weather.timer = 0;
+        weather.particles = [];
+        document.getElementById('weatherDisplay').innerHTML = '☀️';
+        
+        generateLevel(1);
+        updateUI();
+        document.getElementById('levelDisplay').innerText = currentLevel;
+    }
+    
+    function updateUI() {
+        document.getElementById('scoreDisplay').innerText = score;
+        document.getElementById('coinDisplay').innerText = coins;
+        document.getElementById('livesDisplay').innerText = player.lives;
+        if (player.firePower && player.fireTimer > 0) {
+            document.getElementById('fireStatus').innerHTML = '🔥 ' + Math.ceil(player.fireTimer / 60) + 's';
+        } else {
+            document.getElementById('fireStatus').innerHTML = '❌';
+        }
+    }
+    
+    function nextLevel() {
+        currentLevel++;
+        levelTransition = true;
+        transitionTimer = 60;
+        
+        player.x = 200;
+        player.y = H - 40 - player.h;
+        player.vx = 0;
+        player.vy = 0;
+        player.firePower = false;
+        player.fireTimer = 0;
+        player.invincible = true;
+        player.invincibleTimer = 60;
+        cameraX = 0;
+        gameWin = false;
+        
+        generateLevel(currentLevel);
+        updateUI();
+        document.getElementById('levelDisplay').innerText = currentLevel;
+    }
+    
+    // ============ CAMÉRA ============
+    function updateCamera() {
+        let targetX = player.x + player.w/2 - W/2;
+        cameraX = targetX;
+        if (cameraX < 0) cameraX = 0;
+        if (cameraX > WORLD_WIDTH - W) cameraX = WORLD_WIDTH - W;
+    }
+    
+    function toScreenX(worldX) { return worldX - cameraX; }
+    
+    function collide(r1, r2) {
+        return r1.x < r2.x + r2.w && r1.x + r1.w > r2.x &&
+               r1.y < r2.y + r2.h && r1.y + r1.h > r2.y;
+    }
+    
+    // ============ FLAMMES MARIO ============
+    function shootFireball() {
+        if (!player.firePower || player.fireTimer <= 0) return;
+        if (player.fireCooldown > 0) return;
+        
+        let direction = player.facingRight ? 1 : -1;
+        fireballs.push({
+            x: player.x + (direction === 1 ? player.w : -10),
+            y: player.y + player.h/2 - 5, w: 12, h: 8,
+            vx: direction * 9, vy: 0, life: 120
+        });
+        player.fireCooldown = 15;
+    }
+    
+    function updateFireballs() {
+        for (let i = 0; i < fireballs.length; i++) {
+            let f = fireballs[i];
+            f.x += f.vx;
+            f.life--;
+            
+            for (let plat of platforms) {
+                if (collide(f, plat)) { fireballs.splice(i,1); i--; break; }
+            }
+            
+            if (i >= 0 && bowser.active && bowser.alive && collide(f, bowser)) {
+                bowser.health -= 2;
+                fireballs.splice(i,1);
+                i--;
+                updateBossHealthBar();
+                if (bowser.health <= 0) {
+                    bowser.alive = false;
+                    score += 1000;
+                    updateUI();
+                }
+                continue;
+            }
+            
+            if (i >= 0) {
+                for (let j = 0; j < enemies.length; j++) {
+                    if (enemies[j].alive && collide(f, enemies[j])) {
+                        enemies[j].alive = false;
+                        fireballs.splice(i,1);
+                        score += 100;
+                        updateUI();
+                        i--;
+                        break;
+                    }
+                }
+            }
+            if (i >= 0 && fireballs[i] && fireballs[i].life <= 0) fireballs.splice(i,1);
+        }
+        if (player.fireCooldown > 0) player.fireCooldown--;
+    }
+    
+    // ============ BOWSER ============
+    function updateBowser() {
+        if (!bowser.active || !bowser.alive || levelTransition || gameWin) return;
+        
+        bowser.x += bowser.speed * bowser.dir;
+        if (bowser.x < WORLD_WIDTH - 500) bowser.dir = 1;
+        if (bowser.x + bowser.w > WORLD_WIDTH - 100) bowser.dir = -1;
+        
+        bowser.wingCycle = (bowser.wingCycle + 0.2) % (Math.PI * 2);
+        
+        bowser.fireTimer--;
+        if (bowser.fireTimer <= 0) {
+            bowser.fireTimer = 45;
+            let direction = player.x > bowser.x ? 1 : -1;
+            bowserFireballs.push({
+                x: bowser.x + bowser.w/2 - 8,
+                y: bowser.y + 40,
+                w: 16, h: 16,
+                vx: direction * 4 + (Math.random() - 0.5) * 2,
+                vy: 2 + Math.random() * 3,
+                life: 180
+            });
+        }
+        
+        if (collide(player, bowser) && !player.invincible && deathTimer === 0) {
+            player.lives--;
+            updateUI();
+            if (player.lives <= 0) gameOver = true;
+            else {
+                deathTimer = 40;
+                player.invincible = true;
+                player.invincibleTimer = 60;
+                player.firePower = false;
+                player.fireTimer = 0;
+                player.x = 200;
+                player.y = H - 40 - player.h;
+            }
+        }
+    }
+    
+    function updateBowserFireballs() {
+        for (let i = 0; i < bowserFireballs.length; i++) {
+            let f = bowserFireballs[i];
+            f.x += f.vx;
+            f.y += f.vy;
+            f.vy += 0.3;
+            f.life--;
+            
+            if (f.y + f.h > H || f.life <= 0) {
+                bowserFireballs.splice(i,1);
+                i--;
+                continue;
+            }
+            
+            if (collide(player, f) && !player.invincible && deathTimer === 0) {
+                player.lives--;
+                updateUI();
+                if (player.lives <= 0) gameOver = true;
+                else {
+                    deathTimer = 40;
+                    player.invincible = true;
+                    player.invincibleTimer = 60;
+                    player.firePower = false;
+                    player.fireTimer = 0;
+                    player.x = 200;
+                    player.y = H - 40 - player.h;
+                }
+                bowserFireballs.splice(i,1);
+                i--;
+            }
+        }
+    }
+    
+    // ============ PHYSIQUE JOUEUR ============
+    function updatePhysics() {
+        if (deathTimer > 0 || gameOver || gameWin || levelTransition) return;
+        
+        player.onGround = false;
+        player.x += player.vx;
+        
+        for (let plat of platforms) {
+            if (collide(player, plat)) {
+                if (player.vx > 0) player.x = plat.x - player.w;
+                if (player.vx < 0) player.x = plat.x + plat.w;
+            }
+        }
+        
+        player.vy += GRAVITY;
+        player.y += player.vy;
+        
+        for (let plat of platforms) {
+            if (collide(player, plat)) {
+                if (player.vy > 0) {
+                    player.y = plat.y - player.h;
+                    player.vy = 0;
+                    player.onGround = true;
+                } else if (player.vy < 0) {
+                    player.y = plat.y + plat.h;
+                    player.vy = 0;
+                }
+            }
+        }
+        
+        if (player.x < 0) player.x = 0;
+        if (player.x + player.w > WORLD_WIDTH) player.x = WORLD_WIDTH - player.w;
+        
+        if (player.y + player.h > H && deathTimer === 0 && !gameWin) {
+            player.lives--;
+            updateUI();
+            if (player.lives <= 0) gameOver = true;
+            else {
+                deathTimer = 40;
+                player.invincible = true;
+                player.invincibleTimer = 60;
+                player.firePower = false;
+                player.fireTimer = 0;
+                player.x = 200;
+                player.y = H - 40 - player.h;
+            }
+        }
+        if (player.y < 0) player.y = 0;
+        
+        if (Math.abs(player.vx) > 0.5 && player.onGround) {
+            player.walkCycle = (player.walkCycle + 0.3) % (Math.PI * 2);
+        } else {
+            player.walkCycle = 0;
+        }
+    }
+    
+    // ============ DRAPEAU ============
+    function updateFlag() {
+        if (!flag || flag.reached || gameWin) return;
+        if (collide(player, { x: flag.x, y: flag.y, w: flag.w, h: flag.h }) ||
+            collide(player, { x: flag.poleX, y: flag.poleY, w: 8, h: 80 })) {
+            flag.reached = true;
+            gameWin = true;
+            score += 500 * currentLevel;
+            updateUI();
+        }
+    }
+    
+    // ============ VIES SUPPLÉMENTAIRES ============
+    function updateExtraLives() {
+        for (let i = 0; i < extraLives.length; i++) {
+            let life = extraLives[i];
+            if (!life.taken && collide(player, life)) {
+                life.taken = true;
+                player.lives++;
+                updateUI();
+                score += 50;
+            }
+        }
+    }
+    
+    // ============ ENNEMIS (variés) ============
+    function updateEnemies() {
+        if (deathTimer > 0 || gameOver || gameWin || levelTransition) return;
+        
+        for (let i = 0; i < enemies.length; i++) {
+            let e = enemies[i];
+            if (!e.alive) continue;
+            
+            // Mouvements selon type
+            if (e.type === 0) { // Goomba
+                e.x += e.speed * e.dir;
+                if (e.x < 10 || e.x + e.w > WORLD_WIDTH - 10) e.dir *= -1;
+            } else if (e.type === 1) { // Koopa (tortue)
+                e.x += e.speed * e.dir;
+                if (e.x < 10 || e.x + e.w > WORLD_WIDTH - 10) e.dir *= -1;
+            } else if (e.type === 2) { // Champignon sauteur
+                e.x += e.speed * e.dir;
+                if (e.x < 10 || e.x + e.w > WORLD_WIDTH - 10) e.dir *= -1;
+                e.jumpTimer--;
+                if (e.jumpTimer <= 0 && e.onGround) {
+                    e.vy = -7;
+                    e.jumpTimer = 40;
+                }
+                e.vy += GRAVITY;
+                e.y += e.vy;
+                e.onGround = false;
+                for (let plat of platforms) {
+                    if (collide(e, plat)) {
+                        if (e.vy > 0) {
+                            e.y = plat.y - e.h;
+                            e.vy = 0;
+                            e.onGround = true;
+                        }
+                    }
+                }
+            }
+            
+            e.walkCycle = (e.walkCycle + 0.2) % (Math.PI * 2);
+            
+            if (collide(player, e)) {
+                if (player.vy > 0 && player.y + player.h - e.y <= 18) {
+                    e.alive = false;
+                    player.vy = -8;
+                    score += (e.type === 1 ? 150 : 100);
+                    updateUI();
+                } else if (!player.invincible) {
+                    player.lives--;
+                    updateUI();
+                    if (player.lives <= 0) gameOver = true;
+                    else {
+                        deathTimer = 40;
+                        player.invincible = true;
+                        player.invincibleTimer = 60;
+                        player.firePower = false;
+                        player.fireTimer = 0;
+                        player.x = 200;
+                        player.y = H - 40 - player.h;
+                    }
+                }
+            }
+        }
+        enemies = enemies.filter(e => e.alive);
+    }
+    
+    function updateCoins() {
+        for (let c of coinsList) {
+            if (!c.taken && collide(player, c)) {
+                c.taken = true;
+                coins++;
+                score += 20;
+                updateUI();
+            }
+        }
+    }
+    
+    function updatePowerups() {
+        for (let p of powerups) {
+            if (!p.taken && collide(player, p)) {
+                p.taken = true;
+                if (p.type === 'flower') {
+                    player.firePower = true;
+                    player.fireTimer = 600;
+                    score += 50;
+                } else if (p.type === 'star') {
+                    player.invincible = true;
+                    player.invincibleTimer = 180;
+                    score += 100;
+                }
+                updateUI();
+            }
+        }
+    }
+    
+    function updateTimers() {
+        if (deathTimer > 0) deathTimer--;
+        if (player.invincibleTimer > 0) {
+            player.invincibleTimer--;
+            if (player.invincibleTimer <= 0) player.invincible = false;
+        }
+        if (player.fireTimer > 0) {
+            player.fireTimer--;
+            if (player.fireTimer <= 0) player.firePower = false;
+            updateUI();
+        }
+        
+        if (levelTransition) {
+            transitionTimer--;
+            if (transitionTimer <= 0) levelTransition = false;
+        }
+        
+        if (gameWin && !levelTransition && transitionTimer === 0) {
+            transitionTimer = 1;
+            setTimeout(() => { if (gameWin) nextLevel(); gameWin = false; }, 100);
+        }
+        
+        updateWeather();
+    }
+    
+    function updateInput() {
+        if (gameOver || deathTimer > 0 || gameWin || levelTransition) return;
+        
+        if (keys.left) { player.vx = -5.2; player.facingRight = false; }
+        else if (keys.right) { player.vx = 5.2; player.facingRight = true; }
+        else { player.vx *= 0.85; }
+        
+        if (keys.jump && player.onGround) {
+            player.vy = JUMP;
+            player.onGround = false;
+            keys.jump = false;
+        }
+        if (keys.fire) { shootFireball(); keys.fire = false; }
+    }
+    
+    // ============ DESSIN ============
+    function drawBackground() {
+        let grad = ctx.createLinearGradient(0,0,0,H);
+        if (weather.type === 'sunny') grad.addColorStop(0,'#3a8cdf'), grad.addColorStop(1,'#5c94fc');
+        else if (weather.type === 'rain') grad.addColorStop(0,'#5577aa'), grad.addColorStop(1,'#7799cc');
+        else if (weather.type === 'storm') grad.addColorStop(0,'#334455'), grad.addColorStop(1,'#556677');
+        else grad.addColorStop(0,'#aaccee'), grad.addColorStop(1,'#cceeff');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0,0,W,H);
+        
+        ctx.fillStyle = '#FFE066';
+        if (weather.type !== 'storm') ctx.beginPath(), ctx.arc(800,60,40,0,Math.PI*2), ctx.fill();
+        
+        ctx.fillStyle = '#ffffffcc';
+        ctx.beginPath();
+        ctx.ellipse(150-cameraX*0.3,60,50,35,0,0,Math.PI*2);
+        ctx.ellipse(210-cameraX*0.3,45,45,30,0,0,Math.PI*2);
+        ctx.ellipse(90-cameraX*0.3,45,42,30,0,0,Math.PI*2);
+        ctx.fill();
+    }
+    
+    function drawPlatforms() {
+        for(let plat of platforms) {
+            let sx = toScreenX(plat.x);
+            if(sx+plat.w<0||sx>W) continue;
+            ctx.fillStyle='#5d8c2e';
+            ctx.fillRect(sx,plat.y-6,plat.w,8);
+            ctx.fillStyle='#8B5A2B';
+            ctx.fillRect(sx,plat.y,plat.w,plat.h);
+            ctx.fillStyle='#6b3e1a';
+            for(let i=0;i<plat.w/20;i++) ctx.fillRect(sx+i*20+5,plat.y+4,10,plat.h-8);
+        }
+    }
+    
+    function drawPlayer() {
+        let x = toScreenX(player.x), y = player.y;
+        let blink = player.invincible && (Math.floor(Date.now()/80)%3<1);
+        
+        if(player.firePower && player.fireTimer>0 && !blink) ctx.fillStyle='#FF6600';
+        else ctx.fillStyle=blink?'#FFD700':'#E52525';
+        ctx.fillRect(x+5, y, 20, 24);
+        ctx.fillStyle='#FFDAB9';
+        ctx.fillRect(x+7, y-8, 16, 10);
+        ctx.fillStyle='#CC2222';
+        ctx.fillRect(x+3, y-12, 24, 9);
+        ctx.fillRect(x+12, y-10, 6, 5);
+        ctx.fillStyle='#FFF'; ctx.fillRect(x+9, y-4, 5,5); ctx.fillRect(x+16, y-4,5,5);
+        ctx.fillStyle='#000'; ctx.fillRect(x+10, y-3,3,3); ctx.fillRect(x+17, y-3,3,3);
+        ctx.fillStyle='#8B4513';
+        ctx.fillRect(x+8, y+1, 7,3); ctx.fillRect(x+15, y+1,7,3);
+        
+        let legOffset = Math.sin(player.walkCycle) * 3;
+        ctx.fillStyle='#2222AA';
+        ctx.fillRect(x+5, y+24, 8, 8-legOffset);
+        ctx.fillRect(x+17, y+24, 8, 8+legOffset);
+    }
+    
+    function drawEnemies() {
+        for(let e of enemies) {
+            let sx = toScreenX(e.x);
+            if(sx+e.w<0||sx>W) continue;
+            
+            if (e.type === 0) { // Goomba
+                ctx.fillStyle='#8B5A2B';
+                ctx.fillRect(sx, e.y, e.w, e.h);
+                ctx.fillStyle='#FFF';
+                ctx.fillRect(sx+6, e.y+10, 6,6);
+                ctx.fillRect(sx+e.w-12, e.y+10,6,6);
+                ctx.fillStyle='#000';
+                ctx.fillRect(sx+8, e.y+12, 3,3);
+                ctx.fillRect(sx+e.w-10, e.y+12,3,3);
+            } else if (e.type === 1) { // Koopa
+                ctx.fillStyle='#2E8B57';
+                ctx.fillRect(sx, e.y, e.w, e.h);
+                ctx.fillStyle='#3CB371';
+                ctx.fillRect(sx+5, e.y+8, e.w-10, 15);
+                ctx.fillStyle='#FFF';
+                ctx.fillRect(sx+7, e.y+12, 4,4);
+                ctx.fillRect(sx+e.w-11, e.y+12,4,4);
+                ctx.fillStyle='#000';
+                ctx.fillRect(sx+8, e.y+13, 2,2);
+                ctx.fillRect(sx+e.w-10, e.y+13,2,2);
+            } else { // Mushroom
+                ctx.fillStyle='#FF6347';
+                ctx.fillRect(sx, e.y, e.w, e.h);
+                ctx.fillStyle='#FFD700';
+                for(let i=0;i<4;i++) ctx.fillRect(sx+5+i*5, e.y+8, 3, 8);
+                ctx.fillStyle='#000';
+                ctx.fillRect(sx+8, e.y+18, 4,4);
+                ctx.fillRect(sx+e.w-12, e.y+18,4,4);
+            }
+        }
+    }
+    
+    function drawBowser() {
+        if(!bowser.active || !bowser.alive) return;
+        let sx = toScreenX(bowser.x);
+        if(sx+bowser.w<0||sx>W) return;
+        ctx.fillStyle='#2E8B57';
+        ctx.fillRect(sx, bowser.y, bowser.w, bowser.h);
+        ctx.fillStyle='#228B22';
+        ctx.fillRect(sx+20, bowser.y-15, 40, 25);
+        ctx.fillStyle='#FFF';
+        ctx.fillRect(sx+28, bowser.y-8, 8,8);
+        ctx.fillRect(sx+44, bowser.y-8,8,8);
+        ctx.fillStyle='#000';
+        ctx.fillRect(sx+30, bowser.y-6, 4,4);
+        ctx.fillRect(sx+46, bowser.y-6,4,4);
+        let wingY = bowser.y + 20 + Math.sin(bowser.wingCycle) * 5;
+        ctx.fillStyle='#556B2F';
+        ctx.fillRect(sx-15, wingY, 15, 30);
+        ctx.fillRect(sx+bowser.w, wingY, 15, 30);
+        ctx.fillStyle='#FF4500';
+        ctx.fillRect(sx+35, bowser.y+5, 10, 8);
+    }
+    
+    function drawBowserFireballs() {
+        for(let f of bowserFireballs) {
+            let sx = toScreenX(f.x);
+            if(sx+f.w<0||sx>W) continue;
+            ctx.fillStyle='#FF4400';
+            ctx.fillRect(sx, f.y, f.w, f.h);
+        }
+    }
+    
+    function drawFireballs() {
+        for(let f of fireballs) {
+            let sx = toScreenX(f.x);
+            if(sx+f.w<0||sx>W) continue;
+            ctx.fillStyle='#FF4400';
+            ctx.fillRect(sx, f.y, f.w, f.h);
+        }
+    }
+    
+    function drawCoins() {
+        for(let c of coinsList) {
+            if(c.taken) continue;
+            let sx = toScreenX(c.x);
+            if(sx+c.w<0||sx>W) continue;
+            ctx.fillStyle='#FFD700';
+            ctx.fillRect(sx, c.y, c.w, c.h);
+            ctx.fillStyle='#FFA500';
+            ctx.fillRect(sx+2, c.y+2, c.w-4, c.h-4);
+        }
+    }
+    
+    function drawPowerups() {
+        for(let p of powerups) {
+            if(p.taken) continue;
+            let sx = toScreenX(p.x);
+            if(sx+p.w<0||sx>W) continue;
+            if(p.type==='flower') {
+                ctx.fillStyle='#FF6600';
+                ctx.fillRect(sx, p.y, p.w, p.h);
+                ctx.fillStyle='#FFCC00';
+                ctx.fillRect(sx+5, p.y+6, p.w-10, 5);
+            } else {
+                ctx.fillStyle='#FFD700';
+                ctx.fillRect(sx, p.y, p.w, p.h);
+                ctx.fillStyle='#FF8C00';
+                for(let i=0;i<4;i++) ctx.fillRect(sx+5+i*3, p.y+8, 3, 6);
+            }
+        }
+    }
+    
+    function drawExtraLives() {
+        for(let life of extraLives) {
+            if(life.taken) continue;
+            let sx = toScreenX(life.x);
+            if(sx+life.w<0||sx>W) continue;
+            ctx.fillStyle='#00FF44';
+            ctx.fillRect(sx, life.y, life.w, life.h);
+            ctx.fillStyle='#00CC33';
+            ctx.fillRect(sx+3, life.y+3, life.w-6, life.h-6);
+            ctx.fillStyle='#FF0000';
+            ctx.fillRect(sx+7, life.y+5, 4, 8);
+        }
+    }
+    
+    function drawFlag() {
+        if(!flag) return;
+        let sx = toScreenX(flag.poleX);
+        if(sx+40<0||sx>W) return;
+        ctx.fillStyle='#888';
+        ctx.fillRect(sx, flag.poleY, 8, 80);
+        ctx.fillStyle='#FFD700';
+        ctx.fillRect(sx-2, flag.poleY-5, 12, 8);
+        if(!flag.reached) {
+            ctx.fillStyle='#FF0000';
+            ctx.fillRect(sx+8, flag.poleY+10, 45, 35);
+            ctx.fillStyle='#FFD700';
+            ctx.font='bold 24px monospace';
+            ctx.fillText('🏁', sx+18, flag.poleY+36);
+        }
+    }
+    
+    function drawUItext() {
+        if(gameOver) {
+            ctx.font='bold 40px monospace';
+            ctx.fillStyle='#FF0000';
+            ctx.fillText('GAME OVER', W/2-100, H/2-30);
+        } else if(gameWin && !levelTransition) {
+            ctx.font='bold 36px monospace';
+            ctx.fillStyle='#FFD700';
+            ctx.fillText('NIVEAU '+currentLevel+' COMPLETE !', W/2-170, H/2-40);
+        } else if(levelTransition) {
+            ctx.font='bold 32px monospace';
+            ctx.fillStyle='#FFD700';
+            ctx.fillText('NIVEAU '+currentLevel, W/2-100, H/2);
+        }
+    }
+    
+    // ============ BOUCLE ============
+    function update() {
+        if(!gameOver && !levelTransition) {
+            updateInput();
+            updatePhysics();
+            updateEnemies();
+            updateCoins();
+            updatePowerups();
+            updateExtraLives();
+            updateFireballs();
+            updateBowser();
+            updateBowserFireballs();
+            updateFlag();
+            updateTimers();
+            updateCamera();
+        } else {
+            updateTimers();
+        }
+    }
+    
+    function draw() {
+        drawBackground();
+        drawPlatforms();
+        drawCoins();
+        drawPowerups();
+        drawExtraLives();
+        drawFireballs();
+        drawBowserFireballs();
+        drawEnemies();
+        drawBowser();
+        drawFlag();
+        drawPlayer();
+        drawWeather();
+        drawUItext();
+    }
+    
+    function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
+    
+    // ============ CONTROLES ============
+    function keyDown(e) {
+        if(e.key==='ArrowLeft'){keys.left=true;e.preventDefault();}
+        else if(e.key==='ArrowRight'){keys.right=true;e.preventDefault();}
+        else if(e.key==='ArrowUp'||e.key===' '){keys.jump=true;e.preventDefault();}
+        else if(e.key==='x'||e.key==='X'){keys.fire=true;e.preventDefault();}
+    }
+    function keyUp(e) {
+        if(e.key==='ArrowLeft'){keys.left=false;e.preventDefault();}
+        else if(e.key==='ArrowRight'){keys.right=false;e.preventDefault();}
+        else if(e.key==='ArrowUp'||e.key===' '){keys.jump=false;e.preventDefault();}
+        else if(e.key==='x'||e.key==='X'){keys.fire=false;e.preventDefault();}
+    }
+    
+    window.addEventListener('keydown',keyDown);
+    window.addEventListener('keyup',keyUp);
+    document.getElementById('resetBtn').addEventListener('click',()=>init());
+    
+    init();
+    gameLoop();
+</script>
+</body>
+</html>
