@@ -1,4 +1,4 @@
-# 🍄 Super Mario Bros — Édition Ultime Deluxe
+#  Super Mario Bros
 
 ![Version](https://img.shields.io/badge/version-2.0-red?style=for-the-badge)
 ![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white)
